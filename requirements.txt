@@ -1,0 +1,12 @@
+# 核心依赖 - 通义千问Agent框架(包含RAG功能)
+qwen-agent[gui,rag,code_interpreter,mcp]>=0.0.31
+
+# 文档处理 - 针对项目中的PDF和TXT文件
+pypdf>=3.15.1
+pdfplumber>=0.10.2
+
+# 向量数据库 - 用于存储文档嵌入
+chromadb>=0.4.18
+
+# 文本嵌入 - 用于文档向量化
+sentence-transformers>=2.2.2
