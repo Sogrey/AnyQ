@@ -54,15 +54,35 @@ class ESRetrieval(BaseTool):
     def __init__(self, cfg: Optional[Dict] = None):
         super().__init__(cfg)
         self.max_ref_token: int = self.cfg.get('max_ref_token', DEFAULT_MAX_REF_TOKEN)
-        self.es_config = self.cfg.get('es_config', {
-            'hosts': ["https://localhost:9200"],
-            'basic_auth': ("elastic", "7dOzcb0RXmlXWza7VkRV"),
-            'verify_certs': False,
-            'request_timeout': 30
-        })
+        self.es_config = self._build_es_config(self.cfg.get('es_config'))
         self.index_name = self.cfg.get('index_name', 'qwen_agent_docs')
         self.es_client = None
         self._connect_es()
+
+    def _build_es_config(self, es_config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        config: Dict[str, Any] = {}
+        if es_config:
+            config.update(es_config)
+        env_hosts = os.getenv('ES_HOST')
+        if 'hosts' not in config and env_hosts:
+            config['hosts'] = [host.strip() for host in env_hosts.split(',') if host.strip()]
+        hosts = config.get('hosts')
+        if hosts:
+            if isinstance(hosts, str):
+                config['hosts'] = [host.strip() for host in hosts.split(',') if host.strip()]
+            elif not isinstance(hosts, list):
+                config['hosts'] = list(hosts)
+        env_user = os.getenv('ES_USER')
+        env_password = os.getenv('ES_PASSWORD')
+        if 'basic_auth' not in config and env_user is not None and env_password is not None:
+            config['basic_auth'] = (env_user, env_password)
+        env_timeout = os.getenv('ES_TIMEOUT')
+        if 'request_timeout' not in config:
+            config['request_timeout'] = int(env_timeout) if env_timeout else 30
+        env_verify = os.getenv('ES_VERIFY_CERTS')
+        if 'verify_certs' not in config and env_verify:
+            config['verify_certs'] = env_verify.lower() == 'true'
+        return config
 
     def _connect_es(self):
         """连接到Elasticsearch服务器"""

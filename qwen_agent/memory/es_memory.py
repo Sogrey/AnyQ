@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import json
-from typing import Dict, Iterator, List, Optional, Union
+import os
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import json5
 
@@ -34,12 +35,12 @@ class ESMemory(Memory):
     """
 
     def __init__(self,
-                 function_list: Optional[List[Union[str, Dict, BaseTool]]] = None,
-                 llm: Optional[Union[Dict, BaseChatModel]] = None,
+                 function_list: Optional[List[Union[str, Dict[str, Any], BaseTool]]] = None,
+                 llm: Optional[Union[Dict[str, Any], BaseChatModel]] = None,
                  system_message: Optional[str] = None,
                  files: Optional[List[str]] = None,
-                 rag_cfg: Optional[Dict] = None,
-                 es_config: Optional[Dict] = None):
+                 rag_cfg: Optional[Dict[str, Any]] = None,
+                 es_config: Optional[Dict[str, Any]] = None):
         """初始化ESMemory
         
         Args:
@@ -50,15 +51,8 @@ class ESMemory(Memory):
             rag_cfg: RAG配置
             es_config: Elasticsearch配置
         """
-        self.es_config = es_config or {
-            'hosts': ["https://localhost:9200"],
-            'basic_auth': ("elastic", "7dOzcb0RXmlXWza7VkRV"),
-            'verify_certs': False,
-            'request_timeout': 30
-        }
-        
-        # 设置默认RAG配置
         rag_cfg = rag_cfg or {}
+        self.es_config = self._build_es_config(es_config or rag_cfg.get('es_config'))
         self.index_name = rag_cfg.get('index_name', 'qwen_agent_docs')
         
         # 确保配置中包含ES相关参数
@@ -67,11 +61,10 @@ class ESMemory(Memory):
         if 'index_name' not in rag_cfg:
             rag_cfg['index_name'] = self.index_name
             
-        # 初始化父类
-        function_list = function_list or []
+        base_function_list: List[Union[str, Dict[str, Any], BaseTool]] = list(function_list) if function_list else []
         
         # 添加ES工具
-        es_tools = [{
+        es_tools: List[Union[str, Dict[str, Any], BaseTool]] = [{
             'name': 'es_retrieval',
             'max_ref_token': rag_cfg.get('max_ref_token', DEFAULT_MAX_REF_TOKEN),
             'es_config': self.es_config,
@@ -83,14 +76,40 @@ class ESMemory(Memory):
             'es_config': self.es_config,
             'index_name': self.index_name
         }]
+        combined_function_list: List[Union[str, Dict[str, Any], BaseTool]] = es_tools + base_function_list
         
         super().__init__(
-            function_list=es_tools + function_list,
+            function_list=combined_function_list,
             llm=llm,
             system_message=system_message,
             files=files,
             rag_cfg=rag_cfg
         )
+
+    def _build_es_config(self, es_config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        config: Dict[str, Any] = {}
+        if es_config:
+            config.update(es_config)
+        env_hosts = os.getenv('ES_HOST')
+        if 'hosts' not in config and env_hosts:
+            config['hosts'] = [host.strip() for host in env_hosts.split(',') if host.strip()]
+        hosts = config.get('hosts')
+        if hosts:
+            if isinstance(hosts, str):
+                config['hosts'] = [host.strip() for host in hosts.split(',') if host.strip()]
+            elif not isinstance(hosts, list):
+                config['hosts'] = list(hosts)
+        env_user = os.getenv('ES_USER')
+        env_password = os.getenv('ES_PASSWORD')
+        if 'basic_auth' not in config and env_user is not None and env_password is not None:
+            config['basic_auth'] = (env_user, env_password)
+        env_timeout = os.getenv('ES_TIMEOUT')
+        if 'request_timeout' not in config:
+            config['request_timeout'] = int(env_timeout) if env_timeout else 30
+        env_verify = os.getenv('ES_VERIFY_CERTS')
+        if 'verify_certs' not in config and env_verify:
+            config['verify_certs'] = env_verify.lower() == 'true'
+        return config
 
     def _run(self, messages: List[Message], lang: str = 'en', **kwargs) -> Iterator[List[Message]]:
         """处理输入文件并使用Elasticsearch进行检索
@@ -134,14 +153,19 @@ class ESMemory(Memory):
                         keyword = keyword[len('```json'):]
                     if keyword.endswith('```'):
                         keyword = keyword[:-3]
+                    keyword_data: Any = None
                     try:
-                        keyword_dict = json5.loads(keyword)
-                        if 'text' not in keyword_dict:
-                            keyword_dict['text'] = query
-                        query = json.dumps(keyword_dict, ensure_ascii=False)
-                        logger.info(query)
+                        keyword_data = json5.loads(keyword)
                     except Exception:
-                        query = query
+                        keyword_data = None
+
+                    if isinstance(keyword_data, dict):
+                        if 'text' not in keyword_data:
+                            keyword_data['text'] = query
+                        query = json.dumps(keyword_data, ensure_ascii=False)
+                        logger.info(query)
+                    elif keyword_data is not None:
+                        query = str(keyword_data)
                 except Exception as e:
                     logger.warning(f"关键词生成失败: {str(e)}")
 

@@ -78,7 +78,7 @@ def init_agent_service(use_es=True):
     # Elasticsearch配置
     es_config = {
         'hosts': [os.getenv('ES_HOST', 'https://localhost:9200')],
-        'basic_auth': (os.getenv('ES_USER', 'elastic'), os.getenv('ES_PASSWORD', '7dOzcb0RXmlXWza7VkRV')),
+        'basic_auth': (os.getenv('ES_USER', 'elastic'), os.getenv('ES_PASSWORD')),
         'verify_certs': False,
         'request_timeout': 30
     }

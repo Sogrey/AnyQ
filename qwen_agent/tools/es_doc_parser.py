@@ -57,20 +57,36 @@ class ESDocParser(BaseTool):
             'structured_doc': True  # 确保返回结构化文档
         })
         
-        # 从环境变量获取Elasticsearch配置
-        self.es_config = {
-            'hosts': [os.getenv('ES_HOST', 'https://localhost:9200')],
-            'basic_auth': (os.getenv('ES_USER', 'elastic'), os.getenv('ES_PASSWORD', '7dOzcb0RXmlXWza7VkRV')),
-            'verify_certs': os.getenv('ES_VERIFY_CERTS', 'False').lower() == 'true',
-            'request_timeout': int(os.getenv('ES_TIMEOUT', '30'))
-        }
-        # 如果cfg中有配置，则覆盖环境变量
-        if 'es_config' in self.cfg:
-            self.es_config.update(self.cfg['es_config'])
+        self.es_config = self._build_es_config(self.cfg.get('es_config'))
             
         self.default_index_name = os.getenv('ES_INDEX_NAME', self.cfg.get('index_name', 'qwen_agent_docs'))
         self.es_client = None
         self._connect_es()
+
+    def _build_es_config(self, es_config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        config: Dict[str, Any] = {}
+        if es_config:
+            config.update(es_config)
+        env_hosts = os.getenv('ES_HOST')
+        if 'hosts' not in config and env_hosts:
+            config['hosts'] = [host.strip() for host in env_hosts.split(',') if host.strip()]
+        hosts = config.get('hosts')
+        if hosts:
+            if isinstance(hosts, str):
+                config['hosts'] = [host.strip() for host in hosts.split(',') if host.strip()]
+            elif not isinstance(hosts, list):
+                config['hosts'] = list(hosts)
+        env_user = os.getenv('ES_USER')
+        env_password = os.getenv('ES_PASSWORD')
+        if 'basic_auth' not in config and env_user is not None and env_password is not None:
+            config['basic_auth'] = (env_user, env_password)
+        env_timeout = os.getenv('ES_TIMEOUT')
+        if 'request_timeout' not in config:
+            config['request_timeout'] = int(env_timeout) if env_timeout else 30
+        env_verify = os.getenv('ES_VERIFY_CERTS')
+        if 'verify_certs' not in config and env_verify:
+            config['verify_certs'] = env_verify.lower() == 'true'
+        return config
 
     def _connect_es(self):
         """连接到Elasticsearch服务器"""

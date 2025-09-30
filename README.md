@@ -1,5 +1,7 @@
 # AnyQ (Any Question) - 智能文档问答系统
 
+![](screenshot.png)
+
 ## 功能特性
 - 基于向量检索的智能问答系统
 - Elasticsearch 9.1.4 文档检索与向量存储
