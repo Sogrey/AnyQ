@@ -27,9 +27,9 @@ def get_embedding(client, text):
 def connect_es():
     import time
     
-    es_hosts = ["https://localhost:9200", "https://127.0.0.1:9200"]
-    es_user = "elastic"
-    es_password = "7dOzcb0RXmlXWza7VkRV"
+    es_hosts = [os.getenv('ES_HOST', 'https://localhost:9200')]
+    es_user = os.getenv('ES_USER', 'elastic')
+    es_password = os.getenv('ES_PASSWORD','')
     max_retries = 5
     retry_delay = 10  # 秒
     
